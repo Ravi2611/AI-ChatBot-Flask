@@ -1,0 +1,224 @@
+Run the below command to restart venv - 
+deactivate 2>/dev/null; rm -rf venv && python3 -m venv venv && source venv/bin/activate && pip install --upgrade pip && pip install -r requirements.txt
+
+Run the below command to run - 
+python app.py
+
+Run the below command to get out of venv - 
+deactivate
+
+AI Chatbot File Processing System
+----------------------------------
+
+📘 AI ChatBot with Spring Boot + Flask + Postgres (pgvector)
+--------------------------------------------------------------------
+
+1. 🏗️ High-Level Architecture
+----------------------------------
+
+   [ Client / Frontend ]
+            |
+            v
+   [ Spring Boot Layer ]
+        - Exposes /api/query
+        - Forwards requests to Flask
+            |
+            v
+   [ Flask Layer ]
+        - Controller (/query)
+        - File Processing (input_files)
+        - Embedding Index (pgvector)
+        - Query Processing + QA Models
+            |
+            v
+   [ Postgres + pgvector (Docker) ]
+        - Stores documents + embeddings
+        - Vector similarity search
+
+Spring Boot → Public API for queries (/api/query).
+
+Flask → AI/ML processing: embeddings, similarity search, QA refinement.
+
+Postgres (pgvector) → Persistent DB with vector similarity.
+
+Docker → Runs Postgres in isolated, reproducible environment.
+
+
+2. ⚙️ Components Explained
+----------------------------------
+
+🔹 Spring Boot Layer
+----------------------------------
+
+AppConfig.java → Reads Flask API URL from config.
+
+RestTemplateConfig.java → Provides RestTemplate bean for REST calls.
+
+QueryController.java → REST endpoint /api/query. Accepts queries, forwards to Flask.
+
+QueryRequest / QueryResponse.java → DTOs for requests/responses.
+
+FlaskClientService.java → Calls Flask API.
+
+GlobalExceptionHandler.java → Standardized error handling.
+
+👉 Purpose: Provides a typed, validated, enterprise-ready API layer for clients.
+
+🔹 Flask Layer
+----------------------------------
+
+app.py → Flask entrypoint. Exposes /query. Loads embeddings, processes files, queries DB.
+
+embedding_index.py → Handles storing embeddings in Postgres and querying with pgvector.
+
+file_handler.py + parsers (csv, excel, pdf, docx) → Extracts text from files in input_files/.
+
+db.py → Initializes Postgres (documents table with vector embeddings).
+
+query_handler.py → Executes similarity queries on embeddings.
+
+refine_answer.py → Two-step QA: DistilBERT → fallback Flan-T5.
+
+embedding_model.py → Loads all-MiniLM-L6-v2 SentenceTransformer.
+
+config.py → Loads env variables + input_files path.
+
+scheduler.py / watcher.py (optional) → For runtime new file detection.
+
+👉 Purpose: Provides AI logic (embeddings, QA, file parsing, DB ops).
+
+🔹 Database (Postgres + pgvector)
+----------------------------------
+
+Runs inside Docker (ankane/pgvector).
+
+documents table:
+
+id SERIAL PRIMARY KEY
+
+file_name TEXT
+
+content TEXT
+
+embedding vector(384) (MiniLM produces 384-dim vectors)
+
+Indexing/query powered by pgvector extension.
+
+👉 Purpose: Stores all knowledge in searchable vector format.
+
+🔹 Docker
+----------------------------------
+
+docker-compose.yml spins up Postgres with pgvector.
+
+Benefits: isolation, reproducibility, easy reset.
+
+👉 Without Docker, you’d need to manually install Postgres + pgvector locally, which is harder to manage.
+
+3. 🛠️ Technologies & Why
+----------------------------------
+
+Spring Boot → Reliable REST API, enterprise ready.
+
+Flask → Lightweight Python layer for ML/NLP logic.
+
+SentenceTransformers (MiniLM) → Efficient embeddings.
+
+Transformers (DistilBERT, Flan-T5) → Extractive + generative QA.
+
+Postgres + pgvector → Stores embeddings, fast similarity search.
+
+Docker → Simplifies DB setup, reproducibility.
+
+Python Parsers (PyPDF2, python-docx, pandas, openpyxl) → Extracts structured/unstructured text.
+
+4. 🚀 Setup Instructions
+----------------------------------
+4.1 Start Postgres with Docker
+# Navigate to project root where docker-compose.yml exists
+docker-compose up -d
+
+# Verify container is running
+docker ps
+
+4.2 Initialize & Run Flask
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run Flask app
+python app.py
+
+Flask runs on: http://localhost:8000/query
+
+4.3 Run Spring Boot
+cd ChatBotControllerLayer
+mvn spring-boot:run
+
+Spring Boot runs on: http://localhost:8080/api/query
+
+5. 🔄 Query Lifecycle
+----------------------------------
+Client sends query → POST /api/query.
+
+Spring Boot receives request → calls Flask /query.
+
+Flask converts query → embedding vector.
+
+pgvector searches similar embeddings in DB.
+
+Flask retrieves top documents.
+
+DistilBERT extracts answer → fallback Flan-T5 if needed.
+
+Flask returns { answer, sources }.
+
+Spring Boot wraps response → client.
+
+6. 🗄️ Inspect Postgres DB
+----------------------------------
+
+Enter container:
+docker exec -it pgvector-db psql -U aichatbotuser -d aichatbotdb
+
+Check tables:
+\d documents;
+SELECT COUNT(*) FROM documents;
+SELECT file_name, content FROM documents LIMIT 5;
+
+
+7. 📡 Testing with curl
+----------------------------------
+# 1. Ask about AI basics
+curl -X POST http://localhost:8080/api/query \
+-H "Content-Type: application/json" \
+-d '{"query": "What is artificial intelligence?"}'
+
+# 2. Ask about machine learning
+curl -X POST http://localhost:8080/api/query \
+-H "Content-Type: application/json" \
+-d '{"query": "Who is Ravi Raj?"}'
+
+
+8. 🔮 Future Extensions
+----------------------------------
+Enable watcher.py or scheduler.py to auto-detect and process new files.
+
+Add more ML models (GPT, LLaMA, etc).
+
+Add metadata search (per file type, author, timestamp).
+
+Add security aspects
+
+
+
+.env sample 
+----------------------------------
+PGUSER=aichatbotuser
+PGPASSWORD=aichatbotpassword
+PGDATABASE=aichatbotdb
+PGPORT=5432
+PGHOST=localhost
